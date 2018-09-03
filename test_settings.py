@@ -41,3 +41,5 @@ LOCALE_PATHS = [
 ROOT_URLCONF = 'openedx_blockstore_relay.urls'
 
 SECRET_KEY = 'insecure-secret-key'
+
+BLOCKSTORE_API_URL = 'http://localhost:8888/api/v1'

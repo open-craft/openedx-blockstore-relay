@@ -1,0 +1,5 @@
+"""
+Copy this file to openedx_blockstore_relay/settings/private.py
+
+and override any local settings here.
+"""

@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# pylint: disable=C0111,W6005,W6100
 """
 Package metadata for openedx_blockstore_relay.
 """
@@ -74,9 +73,9 @@ setup(
     version=VERSION,
     description="""Django plugin application providing a data and signal relay between Open edX and Blockstore.""",
     long_description=README + '\n\n' + CHANGELOG,
-    author='edX',
-    author_email='oscm@edx.org',
-    url='https://github.com/edx/openedx-blockstore-relay',
+    author='OpenCraft',
+    author_email='help@opencraft.com',
+    url='https://github.com/open-craft/openedx-blockstore-relay',
     packages=[
         'openedx_blockstore_relay',
     ],
@@ -99,4 +98,9 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.6',
     ],
+    entry_points={
+        'cms.djangoapp': [
+            'openedx_blockstore_relay = openedx_blockstore_relay.apps:OpenEdxBlockstoreRelayAppConfig',
+        ],
+    },
 )

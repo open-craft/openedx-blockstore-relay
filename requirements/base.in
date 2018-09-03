@@ -1,4 +1,6 @@
 # Core requirements for using this application
 
 Django>=1.8,<2.0          # Web application framework
-
+edx-opaque-keys>=0.4.2    # Provides Open edX usage keys
+fs==2.0.18                # Used for memory-based filesystem
+future==0.16.0            # Used for python2/3 urllib imports
