@@ -125,7 +125,7 @@ class TransferBlock(object):
                 LOG.warning("Block type not supported, skipping (%s)", block_key)
                 self._block_olx_ok[block_key] = False
                 return None
-            except ResourceNotFound as exc:
+            except (ResourceNotFound, IOError) as exc:
                 LOG.error("Error fetching block OLX (%s): %s", block_key, exc)
                 self._block_olx_ok[block_key] = False
                 return None
