@@ -76,7 +76,7 @@ def collect_assets_from_text(text, course_id):
         raise EdXPlatformImportError(exc)
 
     static_paths = []
-    replace_static_urls(text=text, course_id=course_id, static_paths=static_paths)
+    replace_static_urls(text=text, course_id=course_id, static_paths_out=static_paths)
     for (path, uri) in static_paths:
         content = get_asset_content_from_path(course_id, path)
         if content is None:
