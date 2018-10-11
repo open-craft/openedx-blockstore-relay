@@ -1,33 +1,61 @@
-openedx-blockstore-relay
+Blockstore Relay for Open edX
 =============================
 
 |pypi-badge| |travis-badge| |codecov-badge| |doc-badge| |pyversions-badge|
 |license-badge|
 
-The ``README.rst`` file should start with a brief description of the repository,
-which sets it in the context of other repositories under the ``edx``
-organization. It should make clear where this fits in to the overall edX
-codebase.
+An Open edX Django plugin application for transferring data between Open edX and `Blockstore
+<https://github.com/open-craft/blockstore/>`_.
 
-Django plugin application providing a data and signal relay between Open edX and Blockstore.
+The current version provides a management command which transfers a Unit (vertical) to a Blockstore Bundle.
 
-Overview (please modify)
-------------------------
+Setup Instructions
+------------------
 
-The ``README.rst`` file should then provide an overview of the code in this
-repository, including the main components and useful entry points for starting
-to understand the code in more detail.
+On Open edX Devstack:
 
-Documentation
--------------
+1. Clone this repo into your devstack's ``src`` folder::
 
-The full documentation is at https://openedx-blockstore-relay.readthedocs.org.
+    git clone git@github.com:open-craft/openedx-blockstore-relay.git
+
+2. Install it into Studio's devstack python environment::
+
+    make studio-shell
+    pip install -e /edx/src/openedx-blockstore-relay/
+    
+3. Confirm that the Studio docker container can connect to blockstore (run this from the Studio shell)::
+
+     curl edx.devstack.blockstore:18250/api/v1/ -v
+
+   If it doesn't work, check the Blockstore readme for setup instructions.
+
+4. On your host machine, create/edit `edx-platform/cms/envs/private.py` and add::
+
+    BLOCKSTORE_API_URL = "http://edx.devstack.blockstore:18250/api/v1/"
+
+Usage Instructions
+------------------
+
+Any commands shown in this section should be run from the Studio docker shell (``make studio-shell``).
+
+1. Create a collection to hold the content you wish to import::
+
+     curl -d '{"title": "XBlock Collection"}' -H "Content-Type: application/json" -X POST http://edx.devstack.blockstore:18250/api/v1/collections/
+
+   Note the UUID of the new collection.
+
+2. To upload a unit into blockstore, use the management command like this::
+
+    ./manage.py cms transfer_to_blockstore --settings=devstack_docker --verbosity=2 \
+    --block-key "block-v1:edX+DemoX+Demo_Course+type@vertical+block@256f17a44983429fb1a60802203ee4e0" \
+    --collection-uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
+
+3. Go to http://localhost:18250/api/v1/bundles/ in a browser to see the newly created bundle.
 
 License
 -------
 
-The code in this repository is licensed under the AGPL 3.0 unless
-otherwise noted.
+The code in this repository is licensed under the AGPL 3.0 unless otherwise noted.
 
 Please see ``LICENSE.txt`` for details.
 
@@ -66,7 +94,7 @@ refer to this `list of resources`_ if you need any assistance.
     :alt: PyPI
 
 .. |travis-badge| image:: https://travis-ci.org/edx/openedx-blockstore-relay.svg?branch=master
-    :target: https://travis-ci.org/edx/openedx-blockstore-relay
+    :target: https://travis-ci.org/open-craft/openedx-blockstore-relay
     :alt: Travis
 
 .. |codecov-badge| image:: http://codecov.io/github/edx/openedx-blockstore-relay/coverage.svg?branch=master
@@ -81,6 +109,6 @@ refer to this `list of resources`_ if you need any assistance.
     :target: https://pypi.python.org/pypi/openedx-blockstore-relay/
     :alt: Supported Python versions
 
-.. |license-badge| image:: https://img.shields.io/github/license/edx/openedx-blockstore-relay.svg
-    :target: https://github.com/edx/openedx-blockstore-relay/blob/master/LICENSE.txt
+.. |license-badge| image:: https://img.shields.io/github/license/open-craft/openedx-blockstore-relay.svg
+    :target: https://github.com/open-craft/openedx-blockstore-relay/blob/master/LICENSE.txt
     :alt: License
