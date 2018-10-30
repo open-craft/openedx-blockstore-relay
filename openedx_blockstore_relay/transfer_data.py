@@ -6,16 +6,15 @@ from __future__ import absolute_import, print_function, unicode_literals
 import json
 import logging
 import os
-from xml.etree import ElementTree
 
 import requests
 from django.conf import settings
 from django.utils.translation import gettext as _
-from fs.errors import ResourceNotFound
-from fs.memoryfs import MemoryFS
-from fs.wrapfs import WrapFS
 from future.moves.urllib.parse import urljoin
+from lxml.etree import Element, tostring as etree_tostring
+from xblock.core import XML_NAMESPACES
 
+from .adapters import override_export_fs, add_url_name_mixin
 from . import compat
 
 LOG = logging.getLogger(__name__)
@@ -51,7 +50,8 @@ class TransferBlock(object):
         Store the block_key (UsageKey) and bundle_uuid (UUID).
         """
         super(TransferBlock, self).__init__()
-        self.block = compat.get_block(block_key)
+        with add_url_name_mixin():  # Needed for pure XBlocks that do not inherit XModule export code
+            self.block = compat.get_block(block_key)
         self.bundle_files_url = None
         self.manifest = {
             'schema': self.BUNDLE_SCHEMA_VERSION,
@@ -103,42 +103,27 @@ class TransferBlock(object):
         """
         return self.block.location
 
+    @property
+    def block_files_prefix(self):
+        """
+        For a given unit, all non-public files other than the main OLX file
+        should be in this "folder" within the bundle, e.g. /unit-first_unit/
+        """
+        return '/' + self.block_key.block_id + '/'
+
     def upload_olx(self, block):
         """
-        Upload the OLX for the given block definition, recursing through children.
+        Upload the OLX for the given XBlock/XModule and its children
         """
         block_key = block.location
         if block_key in self._block_olx_ok:
             # Prevent infinite recursion: don't re-create OLX for blocks that we've already done.
             return None
 
-        block_type = block_key.block_type
-        if block_type in ('course', 'chapter', 'sequential', 'vertical'):
-            # Once we have a runtime, we can call `definition_to_xml` for these blocks too.
-            olx_node = ElementTree.Element(block_type)
-        else:
-            try:
-                filesystem = WrapFS(MemoryFS())
-                olx_node = block.definition_to_xml(filesystem)
-                self._upload_related_files(filesystem)
-            except (NotImplementedError, AttributeError):
-                LOG.warning("Block type not supported, skipping (%s)", block_key)
-                self._block_olx_ok[block_key] = False
-                return None
-            except ResourceNotFound as exc:
-                LOG.error("Error fetching block OLX (%s): %s", block_key, exc)
-                self._block_olx_ok[block_key] = False
-                return None
-
-        for child in block.get_children():
-            LOG.debug('Add child %s', child.location)
-            self.upload_olx(child)
-            if self._block_olx_ok[child.location]:
-                # If we've successfully processed this child's OLX,
-                # include a reference to the child in the parent block.
-                child_ref = ElementTree.Element(child.location.block_type)
-                child_ref.set('url_name', child.url_name)
-                olx_node.append(child_ref)
+        olx_node = Element("root", nsmap=XML_NAMESPACES)  # The node name doesn't matter: add_xml_to_node will change it
+        with override_export_fs(block) as filesystem:  # Needed for XBlocks that inherit XModuleDescriptor
+            block.add_xml_to_node(olx_node)
+            self._upload_related_files(filesystem)
 
         self._upload_olx(olx_node, block)
         self._block_olx_ok[block_key] = True
@@ -191,14 +176,17 @@ class TransferBlock(object):
         """
         Upload any files stored in the filesystem during OLX generation.
 
-        Mostly (exclusively?) consists of `.html` files associated with HTML blocks, and so how we handle these needs to
-        be determined per parent block type.
+        Examples of files this covers:
+            - Video XModule exports transcripts as SRT files
+              e.g. /course/static/50ce37bf-594a-425c-9892-6407a5083eb3-en.srt
+            - HTML XModule saves its HTML content in a separate HTML file
+              e.g. /html/197582986ce94c2aa62c673936091cb4.html
         """
         for item in filesystem.walk():
             for unit_file in item.files:
                 file_path = os.path.join(item.path, unit_file.name)
                 self._add_bundle_file(
-                    path=item.path,
+                    path=self.block_files_prefix,
                     name=unit_file.name,
                     data=filesystem.open(file_path, 'rb'),
                 )
@@ -214,9 +202,9 @@ class TransferBlock(object):
         block_type = block_key.block_type
         share_block = (block_key == self.block_key)
         response = self._add_bundle_file(
-            path=os.path.join(os.sep, block_type),
+            path='/',
             name='.'.join([block_id, 'olx']),
-            data=ElementTree.tostring(olx_node, encoding="utf-8"),
+            data=etree_tostring(olx_node, encoding="utf-8", pretty_print=True),
             content_type=self._content_type(block_type),
             share_block=share_block,
             block=block,
@@ -280,7 +268,3 @@ class TransferBlock(object):
         """
         for asset in compat.collect_assets_from_text(data, self.block_key.course_key):
             self._upload_asset(**asset)
-
-        if block and block.location.block_type == 'video':
-            for asset in compat.collect_assets_from_video_block(block):
-                self._upload_asset(**asset)

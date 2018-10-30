@@ -12,6 +12,7 @@ from django.core.management import CommandError, call_command
 from django.test import TestCase
 import mock
 
+
 class TransferToBlockstoreCommandTestCase(TestCase):
     """
     Tests for the transfer_to_blockstore command.

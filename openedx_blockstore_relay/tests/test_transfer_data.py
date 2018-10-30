@@ -9,125 +9,122 @@ from __future__ import absolute_import, unicode_literals
 
 import ddt
 import mock
-from xml.etree import ElementTree
+import re
+from xml.dom import minidom
 
-from django.test import TestCase
-from opaque_keys.edx.keys import UsageKey
-from xblock.core import XBlock
+import edxval.api as edxval_api
+from xmodule.contentstore.content import StaticContent
+from xmodule.contentstore.django import contentstore
+from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
+from xmodule.modulestore.tests.factories import SampleCourseFactory
 
 from openedx_blockstore_relay.transfer_data import TransferBlock, transfer_to_blockstore
-from openedx_blockstore_relay.test_utils.compat import StubCompat, StaticContent
 
+from .course_data import TEST_COURSE, VIDEO_B_VAL_DATA, VIDEO_B_SRT_TRANSCRIPT_DATA
 
-class TestXBlock(XBlock):
-    """
-    A simple XBlock for tests.
-    """
-
-    @property
-    def url_name(self):
-        return self.location.block_id
-
-    def get_children(self):
-        return getattr(self, 'children', [])
-
-    def definition_to_xml(self, resource_fs):
-
-        if self.location.block_type == 'poll':
-            raise NotImplementedError()
-
-        xml_object = ElementTree.Element(self.location.block_type)
-        xml_object.set('display_name', "A test display name")
-        return xml_object
 
 @ddt.ddt
-class TransferBlockTestCase(TestCase):
+class TransferBlockTestCase(ModuleStoreTestCase):
     """
-    Tests for TransferBlock.
+    Tests for TransferBlock. Requires a running instance of edX Studio.
     """
-
-    BLOCK_KEY = 'block-v1:edX+DemoX+Demo_Course+type@vertical+block@v1'
-
-    INVALID_COLLECTION_UUID = 'invalid_bundle_uuid'
-    INVALID_BUNDLE_UUID = 'invalid_bundle_uuid'
-
+    maxDiff = None
     COLLECTION_UUID = 'd3e311a8-b3a8-439d-a111-cc6cb99790e8'
     BUNDLE_UUID = '93fc9c6e-4249-4d57-a63c-b08be9f4fe02'
 
     def setUp(self):
         super(TransferBlockTestCase, self).setUp()
 
-        self.block_key = UsageKey.from_string(self.BLOCK_KEY)
-        self.block = TestXBlock(mock.MagicMock(), scope_ids=mock.MagicMock())
-        self.block.location = self.block_key
+        self.course = SampleCourseFactory.create(block_info_tree=TEST_COURSE)
+        # And upload the course static asssets:
+        asset_key = StaticContent.compute_location(self.course.id, 'sample_handout.txt')
+        content = StaticContent(asset_key, "Fake asset", "application/text", "test".encode('utf8'))
+        contentstore().save(content)
+        # And the video data + transcript must also be stored in edx-val for the video export to work:
+        edxval_api.create_video(VIDEO_B_VAL_DATA)
+        edxval_api.create_video_transcript(**VIDEO_B_SRT_TRANSCRIPT_DATA)
 
-        child_block_1 = TestXBlock(mock.MagicMock(), scope_ids=mock.MagicMock())
-        child_block_1.location = UsageKey.from_string('block-v1:edX+DemoX+Demo_Course+type@html+block@html1')
+    @mock.patch('openedx_blockstore_relay.transfer_data.requests')
+    def test_transfer_to_blockstore(self, mock_requests):
+        mock_response = mock.MagicMock()
 
-        child_block_2 = TestXBlock(mock.MagicMock(), scope_ids=mock.MagicMock())
-        child_block_2.location = UsageKey.from_string('block-v1:edX+DemoX+Demo_Course+type@poll+block@poll1')
+        # TODO: Remove once _add_bundle_file() adds the path to the manifest without looking at the response.
+        mock_response.json.return_value = {
+            'path': '/unit1_1_2.olx',
+        }
+        mock_requests.post.return_value = mock_response
 
-        child_block_3 = TestXBlock(mock.MagicMock(), scope_ids=mock.MagicMock())
-        child_block_3.location = UsageKey.from_string('block-v1:edX+DemoX+Demo_Course+type@video+block@video1')
+        block_key = self.course.id.make_usage_key('vertical', 'unit1_1_2')
+        transfer_obj = TransferBlock(block_key)
+        transfer_obj.transfer_block_to_bundle(self.BUNDLE_UUID)
 
-        self.block.children = [child_block_1, child_block_2, child_block_3]
+        files_posted = set([call_args[1]['data']['path'] for call_args in mock_requests.post.call_args_list])
 
-        self.compat = mock.patch('openedx_blockstore_relay.transfer_data.compat', StubCompat({
-            self.block_key: self.block
-        }, assets=[
-            { 'content':StaticContent(''), 'path':'/static/one.jpeg'},
-            { 'content':StaticContent('<script></script>'), 'path':'/static/one.js'},
-        ], video_assets=[
-            {'content':StaticContent('1. Hello welcome to this course.'), 'path': '/static/transcript.srt'},
-        ]))
-        self.compat.start()
+        self.assertSetEqual(files_posted, {
+            '/bundle.json',
+            '/unit1_1_2.olx',
+            '/unit1_1_2/html_b.html',
+            '/unit1_1_2/50ce37bf-594a-425c-9892-6407a5083eb3-en.srt',  # the subtitles for video_b in unit1_1_2
+            '/static/sample_handout.txt',
+        })
 
+        self.assertDictEqual(transfer_obj.manifest, {
+            'assets': [
+                '/static/sample_handout.txt',
+            ],
+            'components': ['/unit1_1_2.olx'],
+            'dependencies': [],
+            'schema': 0.1,
+            'type': 'olx/unit',
+        })
 
-    def test_bundle_creation(self):
+        file_data_by_path = {
+            args[1]['data']['path']: args[1]['files'][0][1][1]  # files = [('data', (name, data, content_type))]
+            for args in mock_requests.post.call_args_list
+        }
+        self.assertXmlEqual(file_data_by_path['/unit1_1_2.olx'], '''
+            <vertical
+                url_name="unit1_1_2"
+                xmlns:block="http://code.edx.org/xblock/block" xmlns:option="http://code.edx.org/xblock/option"
+            >
+                <html display_name="Unicode and URL test" filename="html_b" url_name="html_b"/>
+                <video
+                    display_name="YouTube Video"
+                    download_video="false"
+                    edx_video_id="50ce37bf-594a-425c-9892-6407a5083eb3"
+                    sub=""
+                    transcripts="{&quot;en&quot;: &quot;50ce37bf-594a-425c-9892-6407a5083eb3-en.srt&quot;}"
+                    url_name="video_b"
+                    youtube_id_1_0="3_yD_cEKoCk"
+                >
+                    <video_asset client_video_id="A Video" duration="0.0" image="">
+                        <transcripts>
+                            <transcript file_format="srt" language_code="en" provider="Custom" />
+                        </transcripts>
+                    </video_asset>
+                    <transcript language="en" src="50ce37bf-594a-425c-9892-6407a5083eb3-en.srt" />
+                </video>
+                <drag-and-drop-v2
+                    url_name="dnd" display_name="A Drag and Drop Block (Pure XBlock)" xblock-family="xblock.v1"
+                />
+            </vertical>
+        ''')
 
-        with mock.patch('openedx_blockstore_relay.transfer_data.requests') as mock_requests:
-            with mock.patch('openedx_blockstore_relay.transfer_data.TransferBlock.transfer_block_to_bundle'):
-                transfer_to_blockstore(self.block_key, collection_uuid=self.COLLECTION_UUID)
+        self.assertXmlEqual(
+            file_data_by_path['/unit1_1_2/html_b.html'],
+            '<p>Activate the ωμέγα 13! <a href="/static/sample_handout.txt">Instructions.</a></p>'
+        )
 
-    def test_transfer_to_blockstore(self):
+    def assertXmlEqual(self, xml_str_a, xml_str_b):
+        """
+        Assert that the given XML strings are equal,
+        ignoring attribute order and some whitespace variations.
+        """
+        def clean(xml_str):
+            # Collapse repeated whitespace:
+            xml_str = re.sub(r'(\s)\s+', r'\1', xml_str)
+            if isinstance(xml_str, unicode):
+                xml_str = xml_str.encode('utf8')
+            return minidom.parseString(xml_str).toprettyxml()
 
-        with mock.patch('openedx_blockstore_relay.transfer_data.requests') as mock_requests:
-
-            mock_response = mock.MagicMock()
-
-            # TODO: Remove once _add_bundle_file() adds the path to the manifest without looking at the response.
-            mock_response.json.return_value = {
-                'path': '/vertical/v1.olx',
-            }
-            mock_requests.post.return_value = mock_response
-
-            transfer_obj = TransferBlock(self.block_key)
-            transfer_obj.transfer_block_to_bundle(self.BUNDLE_UUID)
-
-            files_posted = set([call_args[1]['data']['path'] for call_args in mock_requests.post.call_args_list])
-
-            self.assertSetEqual(files_posted, {
-                '/bundle.json',
-                '/vertical/v1.olx',
-                '/video/video1.olx',
-                '/html/html1.olx',
-                '/static/one.jpeg',
-                '/static/one.js',
-                '/static/transcript.srt',
-            })
-
-            self.assertDictEqual(transfer_obj.manifest, {
-                'assets': [
-                    '/static/one.jpeg',
-                    '/static/one.js',
-                    '/static/one.jpeg',
-                    '/static/one.js',
-                    '/static/transcript.srt',
-                    '/static/one.jpeg',
-                    '/static/one.js'
-                ],
-                'components': ['/vertical/v1.olx'],
-                'dependencies': [],
-                'schema': 0.1,
-                'type': u'olx/unit',
-            })
+        self.assertEqual(clean(xml_str_a), clean(xml_str_b))
