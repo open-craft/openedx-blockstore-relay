@@ -64,6 +64,18 @@ class TransferBlock(object):
         # Store the block_keys we've processed before, to prevent infinite recursion on Directed Acyclic Graphs (DAGs)
         self._block_olx_ok = {}
 
+        self._reset_bundle_files_queue()
+
+    def _reset_bundle_files_queue(self):
+        """
+        Initialize the queue of files to be uploaded to the bundle.
+        """
+        self._bundle_files_queue = {
+            'files': [],
+            'path': [],
+            'public': [],
+        }
+
     def transfer_block_to_bundle(self, bundle_uuid):
         """
         Upload block-related files to the Bundle.
@@ -71,8 +83,9 @@ class TransferBlock(object):
         LOG.debug('Transfer %s to Bundle <%s>', self.block_key, bundle_uuid)
         self.bundle_files_url = urljoin(settings.BLOCKSTORE_API_URL,
                                         '/'.join(['bundles', str(bundle_uuid), 'files', '']))
-        self.upload_olx(self.block)
-        self.upload_manifest()
+        self.prepare_olx(self.block)
+        self.queue_manifest()
+        self._post_bundle_files()
 
     def create_bundle(self, collection_uuid):
         """
@@ -87,7 +100,7 @@ class TransferBlock(object):
             'collection': collection_url,
             'title': getattr(self.block, 'display_name', self.block_key),
             'slug': getattr(self.block, 'url_name', self.block_key.block_id),
-            'description': _("Transferred to Blockstore from Open edX {block_key}".format(block_key=self.block_key)),
+            'description': _("Transferred to Blockstore from Open edX {block_key}").format(block_key=self.block_key),
         }
         LOG.debug("POST create bundle %s %s...", data, bundles_url)
         response = requests.post(bundles_url, data=data)
@@ -111,9 +124,9 @@ class TransferBlock(object):
         """
         return '/' + self.block_key.block_id + '/'
 
-    def upload_olx(self, block):
+    def prepare_olx(self, block):
         """
-        Upload the OLX for the given XBlock/XModule and its children
+        Prepare the OLX for the given XBlock/XModule and its children, and queue for upload.
         """
         block_key = block.location
         if block_key in self._block_olx_ok:
@@ -123,17 +136,17 @@ class TransferBlock(object):
         olx_node = Element("root", nsmap=XML_NAMESPACES)  # The node name doesn't matter: add_xml_to_node will change it
         with override_export_fs(block) as filesystem:  # Needed for XBlocks that inherit XModuleDescriptor
             block.add_xml_to_node(olx_node)
-            self._upload_related_files(filesystem)
+            self._queue_related_files(filesystem)
 
-        self._upload_olx(olx_node, block)
+        self._queue_olx(olx_node, block)
         self._block_olx_ok[block_key] = True
         return olx_node
 
-    def upload_manifest(self, name='bundle.json', path=os.sep):
+    def queue_manifest(self, name='bundle.json', path=os.sep):
         """
-        Upload the bundle manifest file.
+        Adds the bundle manifest file to the upload queue.
         """
-        return self._post_bundle_file(
+        return self._queue_bundle_file(
             path=path,
             name=name,
             data=json.dumps(self.manifest, ensure_ascii=False),
@@ -160,21 +173,21 @@ class TransferBlock(object):
         """
         return 'olx/{}'.format(block_type)
 
-    def _upload_asset(self, path, content):
+    def _queue_asset(self, path, content):
         """
-        Upload the static asset content to the bundle.
+        Adds the static asset content to the upload queue.
         """
         self.manifest['assets'].append(path)
-        return self._post_bundle_file(
+        return self._queue_bundle_file(
             path=path,
             data=content.data,
             content_type=content.content_type,
             public=True,
         )
 
-    def _upload_related_files(self, filesystem):
+    def _queue_related_files(self, filesystem):
         """
-        Upload any files stored in the filesystem during OLX generation.
+        Queues upload for any files stored in the filesystem during OLX generation.
 
         Examples of files this covers:
             - Video XModule exports transcripts as SRT files
@@ -191,9 +204,9 @@ class TransferBlock(object):
                     data=filesystem.open(file_path, 'rb'),
                 )
 
-    def _upload_olx(self, olx_node, block):
+    def _queue_olx(self, olx_node, block):
         """
-        Upload the OLX file to the bundle.
+        Adds the OLX file to the upload queue.
 
         Share the block in the manifest "components" list if it's the top-level block.
         """
@@ -201,7 +214,7 @@ class TransferBlock(object):
         block_id = block_key.block_id
         block_type = block_key.block_type
         share_block = (block_key == self.block_key)
-        response = self._add_bundle_file(
+        self._add_bundle_file(
             path='/',
             name='.'.join([block_id, 'olx']),
             data=etree_tostring(olx_node, encoding="utf-8", pretty_print=True),
@@ -209,7 +222,6 @@ class TransferBlock(object):
             share_block=share_block,
             block=block,
         )
-        return response
 
     def _add_bundle_file(self,
                          data,
@@ -227,16 +239,15 @@ class TransferBlock(object):
             # Read the data from the file pointer into a string so we can scrape it later
             data = data.read()
 
-        response = self._post_bundle_file(data=data, path=path, name=name, content_type=content_type)
+        path = self._queue_bundle_file(data=data, path=path, name=name, content_type=content_type)
         if share_block:
-            self.manifest['components'].append(response.json()['path'])
+            self.manifest['components'].append(path)
 
-        self._upload_static_assets(data, block)
-        return response
+        self._queue_static_assets(data, block)
 
-    def _post_bundle_file(self, data, path, name=None, content_type='application/octet-stream', public=False):
+    def _queue_bundle_file(self, data, path, name=None, content_type='application/octet-stream', public=False):
         """
-        POST the given file to the Blockstore bundle.
+        Queue the given file to be uploaded to the Blockstore bundle.
 
         Arguments:
         * data: string/byte data, or an open file pointer (required)
@@ -252,19 +263,35 @@ class TransferBlock(object):
         if not data:
             # Empty files cause an error, so give it a space
             data = ' '
-        files = [('data', (name, data, content_type))]
-        metadata = {
-            'path': path,
-            'public': public,
-        }
-        LOG.debug("POST file %s to %s...", metadata, self.bundle_files_url)
-        response = requests.post(self.bundle_files_url, files=files, data=metadata)
-        response.raise_for_status()
-        return response
 
-    def _upload_static_assets(self, data, block=None):
+        LOG.debug("Queue file %s...", path)
+        self._bundle_files_queue['files'].append(('data', (name, data, content_type)))
+        self._bundle_files_queue['path'].append(path)
+        self._bundle_files_queue['public'].append(public)
+        return path
+
+    def _queue_static_assets(self, data, block=None):
         """
-        Collect and upload the static assets paths scraped from the given data string and block .
+        Collect and queue the static assets paths scraped from the given data string and block .
         """
         for asset in compat.collect_assets_from_text(data, self.block_key.course_key):
-            self._upload_asset(**asset)
+            self._queue_asset(**asset)
+
+    def _post_bundle_files(self):
+        """
+        POST the queued files and metadata to the Blockstore bundle.
+        """
+        LOG.debug("POST %s files to %s...", len(self._bundle_files_queue['files']), self.bundle_files_url)
+        response = None
+        if self._bundle_files_queue['files']:
+            response = requests.post(
+                self.bundle_files_url,
+                files=self._bundle_files_queue['files'],
+                data={
+                    'path': self._bundle_files_queue['path'],
+                    'public': self._bundle_files_queue['public'],
+                },
+            )
+            response.raise_for_status()
+            self._reset_bundle_files_queue()
+        return response

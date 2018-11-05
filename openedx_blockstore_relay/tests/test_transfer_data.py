@@ -7,10 +7,9 @@ Tests for the `openedx-blockstore-relay` transfer_data module.
 from __future__ import absolute_import, unicode_literals
 
 
-import ddt
-import mock
-import re
 from xml.dom import minidom
+import re
+import mock
 
 import edxval.api as edxval_api
 from xmodule.contentstore.content import StaticContent
@@ -18,12 +17,11 @@ from xmodule.contentstore.django import contentstore
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import SampleCourseFactory
 
-from openedx_blockstore_relay.transfer_data import TransferBlock, transfer_to_blockstore
+from openedx_blockstore_relay.transfer_data import TransferBlock
 
 from .course_data import TEST_COURSE, VIDEO_B_VAL_DATA, VIDEO_B_SRT_TRANSCRIPT_DATA
 
 
-@ddt.ddt
 class TransferBlockTestCase(ModuleStoreTestCase):
     """
     Tests for TransferBlock. Requires a running instance of edX Studio.
@@ -58,7 +56,9 @@ class TransferBlockTestCase(ModuleStoreTestCase):
         transfer_obj = TransferBlock(block_key)
         transfer_obj.transfer_block_to_bundle(self.BUNDLE_UUID)
 
-        files_posted = set([call_args[1]['data']['path'] for call_args in mock_requests.post.call_args_list])
+        mock_requests.post.assert_called_once()
+        call_kwargs = mock_requests.post.call_args[1]
+        files_posted = set(call_kwargs['data']['path'])
 
         self.assertSetEqual(files_posted, {
             '/bundle.json',
@@ -79,9 +79,10 @@ class TransferBlockTestCase(ModuleStoreTestCase):
         })
 
         file_data_by_path = {
-            args[1]['data']['path']: args[1]['files'][0][1][1]  # files = [('data', (name, data, content_type))]
-            for args in mock_requests.post.call_args_list
+            call_kwargs['data']['path'][idx]: call_kwargs['files'][idx][1][1]
+                for idx in list(range(len(call_kwargs['files'])))  # files = [('data', (name, data, content_type)), ...]
         }
+
         self.assertXmlEqual(file_data_by_path['/unit1_1_2.olx'], '''
             <vertical
                 url_name="unit1_1_2"

@@ -5,20 +5,20 @@
 #    make upgrade
 #
 appdirs==1.4.3
-atomicwrites==1.2.0       # via pytest
-attrs==18.1.0             # via pytest
+atomicwrites==1.2.1       # via pytest
+attrs==18.2.0             # via pytest
 coverage==4.5.1           # via pytest-cov
 edx-opaque-keys==0.4.4
 fs==2.0.18
 future==0.16.0
 more-itertools==4.3.0     # via pytest
-pbr==4.2.0
-pluggy==0.7.1             # via pytest
-py==1.6.0                 # via pytest
-pymongo==3.7.1
-pytest-cov==2.5.1
-pytest-django==3.4.2
-pytest==3.7.4             # via pytest-cov, pytest-django
-pytz==2018.5
+pbr==5.1.0
+pluggy==0.8.0             # via pytest
+py==1.7.0                 # via pytest
+pymongo==3.7.2
+pytest-cov==2.6.0
+pytest-django==3.4.3
+pytest==3.9.3             # via pytest-cov, pytest-django
+pytz==2018.7
 six==1.11.0
-stevedore==1.29.0
+stevedore==1.30.0
