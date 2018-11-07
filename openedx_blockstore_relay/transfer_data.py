@@ -138,9 +138,27 @@ class TransferBlock(object):
             block.add_xml_to_node(olx_node)
             self._queue_related_files(filesystem)
 
+        self.transform_olx(olx_node)
+
         self._queue_olx(olx_node, block)
         self._block_olx_ok[block_key] = True
         return olx_node
+
+    def transform_olx(self, olx_node):
+        """
+        Apply transformations to the given OLX etree Node.
+
+        Specifically, we convert the <vertical> tag to the
+        <unit> tag, which is preferred for use in Blockstore.
+        (Unit is more generic, has less tech debt, and is
+        not coupled so tightly to the Open edX LMS runtime UI.)
+        """
+        for node in olx_node.iter():
+            if node.tag == 'vertical':
+                node.tag = 'unit'
+                for key in node.attrib.keys():
+                    if key not in ('display_name', 'url_name'):
+                        LOG.warn('<vertical> tag attribute "%s" will be ignored after conversion to <unit>', key)
 
     def queue_manifest(self, name='bundle.json', path=os.sep):
         """

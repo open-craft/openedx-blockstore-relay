@@ -84,7 +84,7 @@ class TransferBlockTestCase(ModuleStoreTestCase):
         }
 
         self.assertXmlEqual(file_data_by_path['/unit1_1_2.olx'], '''
-            <vertical
+            <unit
                 url_name="unit1_1_2"
                 xmlns:block="http://code.edx.org/xblock/block" xmlns:option="http://code.edx.org/xblock/option"
             >
@@ -108,7 +108,7 @@ class TransferBlockTestCase(ModuleStoreTestCase):
                 <drag-and-drop-v2
                     url_name="dnd" display_name="A Drag and Drop Block (Pure XBlock)" xblock-family="xblock.v1"
                 />
-            </vertical>
+            </unit>
         ''')
 
         self.assertXmlEqual(
