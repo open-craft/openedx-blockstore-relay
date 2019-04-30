@@ -6,6 +6,9 @@ openedx_blockstore_relay Django application initialization.
 from __future__ import absolute_import, unicode_literals
 
 from django.apps import AppConfig
+from openedx.core.djangoapps.plugins.constants import (
+    ProjectType, SettingsType, PluginSettings
+)
 
 
 class OpenEdxBlockstoreRelayAppConfig(AppConfig):
@@ -17,28 +20,14 @@ class OpenEdxBlockstoreRelayAppConfig(AppConfig):
 
     name = 'openedx_blockstore_relay'
     plugin_app = {
-        'url_config': {
-            'lms.djangoapp': {
-                'namespace': 'blockstore_relay',
-                'app_name': 'blockstore_relay',
-                'regex': r'^blockstore_relay/',
-                'relative_path': 'urls',
+        PluginSettings.CONFIG: {
+            ProjectType.LMS: {
+                SettingsType.COMMON: {PluginSettings.RELATIVE_PATH: 'settings'},
+                SettingsType.PRODUCTION: {PluginSettings.RELATIVE_PATH: 'settings'},
             },
-            'cms.djangoapp': {
-                'namespace': 'blockstore_relay',
-                'app_name': 'blockstore_relay',
-                'regex': r'^blockstore_relay/',
-                'relative_path': 'urls',
-            },
-        },
-        'settings_config': {
-            'lms.djangoapp': {
-                'common': {'relative_path': 'settings.common'},
-                'aws': {'relative_path': 'settings.production'},
-            },
-            'cms.djangoapp': {
-                'common': {'relative_path': 'settings.common'},
-                'aws': {'relative_path': 'settings.production'},
+            ProjectType.CMS: {
+                SettingsType.COMMON: {PluginSettings.RELATIVE_PATH: 'settings'},
+                SettingsType.PRODUCTION: {PluginSettings.RELATIVE_PATH: 'settings'},
             },
         },
     }
