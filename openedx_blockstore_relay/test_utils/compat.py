@@ -6,6 +6,10 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 
 class StubCompat(object):
+    """
+    Stub version of 'compat' library for use in tests
+    """
+    # pylint: disable=unused-argument
 
     def __init__(self, blocks, assets=None, video_assets=None):
         self.blocks = blocks

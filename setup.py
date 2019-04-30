@@ -3,7 +3,8 @@
 """
 Package metadata for openedx_blockstore_relay.
 """
-from __future__ import absolute_import, print_function
+# pylint: disable=open-builtin
+from __future__ import absolute_import, print_function, unicode_literals
 
 import os
 import re

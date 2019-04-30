@@ -3,15 +3,13 @@
 """
 Tests for the `openedx-blockstore-relay` transfer_data module.
 """
-
-from __future__ import absolute_import, unicode_literals
-
-
+from __future__ import absolute_import, division, print_function, unicode_literals
 from xml.dom import minidom
 import re
 import mock
 
 import edxval.api as edxval_api
+import six
 from xmodule.contentstore.content import StaticContent
 from xmodule.contentstore.django import contentstore
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
@@ -80,7 +78,7 @@ class TransferBlockTestCase(ModuleStoreTestCase):
 
         file_data_by_path = {
             call_kwargs['data']['path'][idx]: call_kwargs['files'][idx][1][1]
-                for idx in list(range(len(call_kwargs['files'])))  # files = [('data', (name, data, content_type)), ...]
+            for idx in list(range(len(call_kwargs['files'])))  # files = [('data', (name, data, content_type)), ...]
         }
 
         self.assertXmlEqual(file_data_by_path['/unit1_1_2.olx'], '''
@@ -124,7 +122,7 @@ class TransferBlockTestCase(ModuleStoreTestCase):
         def clean(xml_str):
             # Collapse repeated whitespace:
             xml_str = re.sub(r'(\s)\s+', r'\1', xml_str)
-            if isinstance(xml_str, unicode):
+            if isinstance(xml_str, six.text_type):
                 xml_str = xml_str.encode('utf8')
             return minidom.parseString(xml_str).toprettyxml()
 

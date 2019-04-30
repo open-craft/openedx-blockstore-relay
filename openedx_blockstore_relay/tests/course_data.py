@@ -2,6 +2,7 @@
 """
 A course containing each of the features whose export functionality we want to test
 """
+from __future__ import absolute_import, division, print_function, unicode_literals
 from django.core.files.base import ContentFile
 from edxval.api import EXTERNAL_VIDEO_STATUS, TranscriptFormat
 from xmodule.modulestore.tests.sample_courses import BlockInfo
