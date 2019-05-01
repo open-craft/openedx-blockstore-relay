@@ -3,21 +3,32 @@ Logic for transferring a subunit (aka XBlock, XModule) from Open edX to a Blocks
 """
 from __future__ import absolute_import, print_function, unicode_literals
 
+import base64
 import json
 import logging
 import os
 
-import requests
 from django.conf import settings
 from django.utils.translation import gettext as _
 from future.moves.urllib.parse import urljoin
 from lxml.etree import Element, tostring as etree_tostring
+import requests
+from requests.exceptions import HTTPError
+import six
 from xblock.core import XML_NAMESPACES
 
 from .adapters import override_export_fs, add_url_name_mixin
 from . import compat
 
 LOG = logging.getLogger(__name__)
+BUNDLE_DRAFT_NAME = 'relay_import'
+
+
+def encode_str_for_draft(input_str):
+    """Given a string, return UTF-8 representation that is then base64 encoded."""
+    if isinstance(input_str, six.text_type):
+        input_str = input_str.encode('utf8')
+    return base64.b64encode(input_str)
 
 
 def transfer_to_blockstore(block_key, bundle_uuid=None, collection_uuid=None):
@@ -52,7 +63,8 @@ class TransferBlock(object):
         super(TransferBlock, self).__init__()
         with add_url_name_mixin():  # Needed for pure XBlocks that do not inherit XModule export code
             self.block = compat.get_block(block_key)
-        self.bundle_files_url = None
+        self.bundle_draft_uuid = None
+        self.bundle_draft_url = None
         self.manifest = {
             'schema': self.BUNDLE_SCHEMA_VERSION,
             'type': self._bundle_type(block_key.block_type),
@@ -64,42 +76,28 @@ class TransferBlock(object):
         # Store the block_keys we've processed before, to prevent infinite recursion on Directed Acyclic Graphs (DAGs)
         self._block_olx_ok = {}
 
-        self._reset_bundle_files_queue()
-
-    def _reset_bundle_files_queue(self):
-        """
-        Initialize the queue of files to be uploaded to the bundle.
-        """
-        self._bundle_files_queue = {
-            'files': [],
-            'path': [],
-            'public': [],
-        }
-
     def transfer_block_to_bundle(self, bundle_uuid):
         """
         Upload block-related files to the Bundle.
         """
         LOG.debug('Transfer %s to Bundle <%s>', self.block_key, bundle_uuid)
-        self.bundle_files_url = urljoin(
-            settings.BLOCKSTORE_API_URL,
-            '/'.join(['bundles', str(bundle_uuid), 'files', '']),
-        )
         self.prepare_olx(self.block)
         self.queue_manifest()
-        self._post_bundle_files()
+        self.commit_draft()
+        LOG.info('Finished import!')
 
     def create_bundle(self, collection_uuid):
         """
         Create a new bundle on the given collection, and return its UUID.
 
+        Also creates a draft that we can use to hold incoming files.
+
         Use the given block to set the description, slug, and title of the new Bundle.
         """
         LOG.debug('Create new Bundle on Collection <%s>', collection_uuid)
-        collection_url = urljoin(settings.BLOCKSTORE_API_URL, '/'.join(['collections', str(collection_uuid), '']))
-        bundles_url = urljoin(settings.BLOCKSTORE_API_URL, '/'.join(['bundles', '']))
+        bundles_url = urljoin(settings.BLOCKSTORE_API_URL, '/'.join(['bundles']))
         data = {
-            'collection': collection_url,
+            'collection_uuid': str(collection_uuid),
             'title': getattr(self.block, 'display_name', self.block_key),
             'slug': getattr(self.block, 'url_name', self.block_key.block_id),
             'description': _("Transferred to Blockstore from Open edX {block_key}").format(block_key=self.block_key),
@@ -109,6 +107,19 @@ class TransferBlock(object):
         response.raise_for_status()
         bundle_uuid = response.json()['uuid']
         LOG.info('Created bundle at %s', urljoin(bundles_url, bundle_uuid))
+        # Now create a draft to hold our uploaded files:
+        LOG.debug('Creating "%s" draft to hold incoming files', BUNDLE_DRAFT_NAME)
+        create_draft_response = requests.post(
+            urljoin(settings.BLOCKSTORE_API_URL, 'drafts'),
+            {
+                'bundle_uuid': bundle_uuid,
+                'name': BUNDLE_DRAFT_NAME,
+                'title': "OLX imported via openedx-blockstore-relay",
+            }
+        )
+        create_draft_response.raise_for_status()
+        self.bundle_draft_uuid = create_draft_response.json()['uuid']
+        self.bundle_draft_url = create_draft_response.json()['url']
         return bundle_uuid
 
     @property
@@ -264,9 +275,10 @@ class TransferBlock(object):
 
         self._queue_static_assets(data)
 
+    # pylint: disable=unused-argument
     def _queue_bundle_file(self, data, path, name=None, content_type='application/octet-stream', public=False):
         """
-        Queue the given file to be uploaded to the Blockstore bundle.
+        Queue the given file in the Blockstore bundle's drafts area.
 
         Arguments:
         * data: string/byte data, or an open file pointer (required)
@@ -279,14 +291,22 @@ class TransferBlock(object):
             name = os.path.basename(path)
         else:
             path = os.path.join(path, name)
+        path = path.lstrip('/')
         if not data:
             # Empty files cause an error, so give it a space
             data = ' '
 
-        LOG.debug("Queue file %s...", path)
-        self._bundle_files_queue['files'].append(('data', (name, data, content_type)))
-        self._bundle_files_queue['path'].append(path)
-        self._bundle_files_queue['public'].append(public)
+        LOG.debug("Uploading file %s to draft", path)
+        response = requests.patch(
+            self.bundle_draft_url,
+            json={
+                'files': {path: encode_str_for_draft(data)}
+            },
+        )
+        try:
+            response.raise_for_status()
+        except HTTPError:
+            LOG.exception("Unable to upload file %s to draft: %s", path, response.content)
         return path
 
     def _queue_static_assets(self, data):
@@ -296,21 +316,11 @@ class TransferBlock(object):
         for asset in compat.collect_assets_from_text(data, self.block_key.course_key):
             self._queue_asset(**asset)
 
-    def _post_bundle_files(self):
+    def commit_draft(self):
         """
-        POST the queued files and metadata to the Blockstore bundle.
+        Commit the draft, saving the files to the Blockstore bundle.
         """
-        LOG.debug("POST %s files to %s...", len(self._bundle_files_queue['files']), self.bundle_files_url)
-        response = None
-        if self._bundle_files_queue['files']:
-            response = requests.post(
-                self.bundle_files_url,
-                files=self._bundle_files_queue['files'],
-                data={
-                    'path': self._bundle_files_queue['path'],
-                    'public': self._bundle_files_queue['public'],
-                },
-            )
-            response.raise_for_status()
-            self._reset_bundle_files_queue()
-        return response
+        LOG.debug("Committing bundle draft")
+        requests.post(
+            urljoin(settings.BLOCKSTORE_API_URL, 'drafts/{}/commit'.format(self.bundle_draft_uuid)),
+        )
