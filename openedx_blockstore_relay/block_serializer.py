@@ -32,7 +32,11 @@ def blockstore_def_key_from_modulestore_usage_key(usage_key):
     will become Blockstore definition key
         html/introduction
     """
-    return usage_key.block_type + "/" + usage_key.block_id
+    block_type = usage_key.block_type
+    if block_type == 'vertical':
+        # We transform <vertical> to <unit>
+        block_type = "unit"
+    return block_type + "/" + usage_key.block_id
 
 
 class XBlockSerializer(object):
@@ -55,7 +59,8 @@ class XBlockSerializer(object):
 
         # Create an XML node to hold the exported data
         olx_node = Element("root")  # The node name doesn't matter: add_xml_to_node will change it
-                                    # We could pass nsmap=xblock.core.XML_NAMESPACES but it just seems like cruft
+        # ^ Note: We could pass nsmap=xblock.core.XML_NAMESPACES here, but the
+        # resulting XML namespace attributes don't seem that useful?
         with override_export_fs(block) as filesystem:  # Needed for XBlocks that inherit XModuleDescriptor
             # Tell the block to serialize itself as XML/OLX:
             if not block.has_children:
@@ -127,14 +132,9 @@ class XBlockSerializer(object):
         # within the OLX file is redundant and can lead to issues if the file is
         # copied and pasted elsewhere in the bundle with a new definition key.
         olx_node.attrib.pop('url_name', None)
-
-        for node in olx_node.iter():
-            # we convert the <vertical> tag to the
-            # <unit> tag, which is preferred for use in Blockstore.
-            # (Unit is more generic, has less tech debt, and is
-            # not coupled so tightly to the Open edX LMS runtime UI.)
-            if node.tag == 'vertical':
-                node.tag = 'unit'
-                for key in node.attrib.keys():
-                    if key not in ('display_name', 'url_name'):
-                        log.warn('<vertical> tag attribute "%s" will be ignored after conversion to <unit>', key)
+        # Convert <vertical> to the new <unit> tag/block
+        if olx_node.tag == 'vertical':
+            olx_node.tag = 'unit'
+            for key in olx_node.attrib.keys():
+                if key not in ('display_name', 'url_name'):
+                    log.warn('<vertical> tag attribute "%s" will be ignored after conversion to <unit>', key)

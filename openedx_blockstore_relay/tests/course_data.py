@@ -3,8 +3,14 @@
 A course containing each of the features whose export functionality we want to test
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django.core.files.base import ContentFile
-from edxval.api import EXTERNAL_VIDEO_STATUS, TranscriptFormat
+import edxval.api as edxval_api
+from xmodule.contentstore.content import StaticContent
+from xmodule.contentstore.django import contentstore
+from xmodule.modulestore import ModuleStoreEnum
+from xmodule.modulestore.django import modulestore
+from xmodule.modulestore.tests.factories import SampleCourseFactory
 from xmodule.modulestore.tests.sample_courses import BlockInfo
 
 TEST_COURSE = [
@@ -31,7 +37,7 @@ TEST_COURSE = [
                         ]
                     ),
                     BlockInfo(
-                        'unit1_1_2', 'vertical', {}, [
+                        'unit1_1_2', 'vertical', {"display_name": "Unit 1.1.2"}, [
                             BlockInfo('html_b', 'html', {
                                 "data": (
                                     '<p>'
@@ -75,7 +81,7 @@ TEST_COURSE = [
 VIDEO_B_EDX_VIDEO_ID = '50ce37bf-594a-425c-9892-6407a5083eb3'
 VIDEO_B_VAL_DATA = {
     'edx_video_id': VIDEO_B_EDX_VIDEO_ID,
-    'status': EXTERNAL_VIDEO_STATUS,
+    'status': edxval_api.EXTERNAL_VIDEO_STATUS,
     'client_video_id': 'A Video',
     'duration': 0,
     'encoded_videos': [],
@@ -91,6 +97,29 @@ ANANT AGARWAL: Welcome to edX.
 VIDEO_B_SRT_TRANSCRIPT_DATA = {
     "video_id": VIDEO_B_EDX_VIDEO_ID,
     "language_code": 'en',
-    "file_format": TranscriptFormat.SRT,
+    "file_format": edxval_api.TranscriptFormat.SRT,
     "content": ContentFile(VIDEO_B_SRT_TRANSCRIPT_CONTENT),
 }
+
+
+class TestCourseMixin(object):
+    """
+    Mixin that creates a full modulestore test course that can be used.
+
+    Must be mixed into a test case that inherits from ModuleStoreTestCase.
+    """
+    COLLECTION_UUID = 'd3e311a8-b3a8-439d-a111-cc6cb99790e8'
+    BUNDLE_UUID = '93fc9c6e-4249-4d57-a63c-b08be9f4fe02'
+
+    def setUp(self):
+        super(TestCourseMixin, self).setUp()
+
+        with modulestore().default_store(ModuleStoreEnum.Type.split):
+            self.course = SampleCourseFactory.create(block_info_tree=TEST_COURSE)
+        # And upload the course static asssets:
+        asset_key = StaticContent.compute_location(self.course.id, 'sample_handout.txt')
+        content = StaticContent(asset_key, "Fake asset", "application/text", "test".encode('utf8'))
+        contentstore().save(content)
+        # And the video data + transcript must also be stored in edx-val for the video export to work:
+        edxval_api.create_video(VIDEO_B_VAL_DATA)
+        edxval_api.create_video_transcript(**VIDEO_B_SRT_TRANSCRIPT_DATA)

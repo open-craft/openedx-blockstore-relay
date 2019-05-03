@@ -21,8 +21,6 @@ BUNDLE_DRAFT_NAME = 'relay_import'
 BUNDLE_SCHEMA_VERSION = 0.1
 
 
-
-
 def _bundle_type(block_type):
     """
     Return the manifest type to set for the given block_type.
