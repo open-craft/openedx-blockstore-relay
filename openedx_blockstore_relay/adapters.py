@@ -6,7 +6,6 @@ from contextlib import contextmanager
 from fs.memoryfs import MemoryFS
 from fs.wrapfs import WrapFS
 
-from django.conf import settings
 from xmodule.xml_module import XmlParserMixin
 
 
@@ -42,34 +41,3 @@ def override_export_fs(block):
     if hasattr(block, 'export_to_file'):
         block.export_to_file = old_export_to_file
     XmlParserMixin.export_to_file = old_global_export_to_file
-
-
-class UrlNameMixin(object):
-    """
-    Mixin to add url_name attribute to pure XBlocks that don't do so.
-
-    url_name is not a standard XBlock serialization attribute, but is
-    expected in OLX, and is useful for stably idenifying blocks even
-    when they get reordered within an OLX file.
-    """
-    def add_xml_to_node(self, node):
-        """
-        For exporting, set data on `node` from ourselves.
-        """
-        super(UrlNameMixin, self).add_xml_to_node(node)
-        if not node.get('url_name'):
-            node.set('url_name', self.scope_ids.usage_id.block_id)
-
-
-@contextmanager
-def add_url_name_mixin():
-    """
-    XModules, as well as built-in XBlocks that use the XmlParserMixin,
-    add a 'url_name' attribute to their main XML node. Pure XBlocks do
-    not, but we need those url_names to have stable identifiers for each
-    XBlock in the resulting OLX file.
-    """
-    old_mixins = settings.XBLOCK_MIXINS
-    settings.XBLOCK_MIXINS = [UrlNameMixin] + list(settings.XBLOCK_MIXINS)
-    yield
-    settings.XBLOCK_MIXINS = old_mixins

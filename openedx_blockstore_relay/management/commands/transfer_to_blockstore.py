@@ -84,7 +84,7 @@ class Command(BaseCommand):
             raise ArgumentError(message='Either collection OR bundle UUID is required',
                                 argument=self.args['collection_uuid'])
 
-        transfer_to_blockstore(block_key=block_key, bundle_uuid=bundle_uuid, collection_uuid=collection_uuid)
+        transfer_to_blockstore(root_block_key=block_key, bundle_uuid=bundle_uuid, collection_uuid=collection_uuid)
 
     def set_logging(self, verbosity):
         """
