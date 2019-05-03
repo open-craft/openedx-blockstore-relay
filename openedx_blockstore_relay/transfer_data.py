@@ -11,11 +11,12 @@ import requests
 from django.conf import settings
 from django.utils.translation import gettext as _
 from future.moves.urllib.parse import urljoin
-from lxml.etree import Element, tostring as etree_tostring
+from lxml.etree import Element
+from lxml.etree import tostring as etree_tostring
 from xblock.core import XML_NAMESPACES
 
-from .adapters import override_export_fs, add_url_name_mixin
 from . import compat
+from .adapters import add_url_name_mixin, override_export_fs
 
 LOG = logging.getLogger(__name__)
 

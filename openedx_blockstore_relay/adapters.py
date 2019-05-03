@@ -2,11 +2,13 @@
 Helpers required to adapt to differing APIs
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
+
 from contextlib import contextmanager
+
+from django.conf import settings
 from fs.memoryfs import MemoryFS
 from fs.wrapfs import WrapFS
 
-from django.conf import settings
 from xmodule.xml_module import XmlParserMixin
 
 

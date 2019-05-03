@@ -4,20 +4,21 @@
 Tests for the `openedx-blockstore-relay` transfer_data module.
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
-from xml.dom import minidom
+
 import re
-import mock
+from xml.dom import minidom
 
 import edxval.api as edxval_api
+import mock
 import six
+
 from xmodule.contentstore.content import StaticContent
 from xmodule.contentstore.django import contentstore
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
 from xmodule.modulestore.tests.factories import SampleCourseFactory
 
-from openedx_blockstore_relay.transfer_data import TransferBlock
-
-from .course_data import TEST_COURSE, VIDEO_B_VAL_DATA, VIDEO_B_SRT_TRANSCRIPT_DATA
+from ..transfer_data import TransferBlock
+from .course_data import TEST_COURSE, VIDEO_B_SRT_TRANSCRIPT_DATA, VIDEO_B_VAL_DATA
 
 
 class TransferBlockTestCase(ModuleStoreTestCase):

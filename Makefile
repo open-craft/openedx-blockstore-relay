@@ -1,6 +1,6 @@
 .PHONY: clean compile_translations coverage diff_cover docs dummy_translations \
 	extract_translations fake_translations help pull_translations push_translations \
-	quality selfcheck test test-all validate
+	quality selfcheck test validate
 
 .DEFAULT_GOAL := help
 
@@ -62,7 +62,7 @@ quality: ## check coding style with pycodestyle and pylint
 	pylint openedx_blockstore_relay $(PROJECT_ROOT)setup.py
 	pylint --py3k openedx_blockstore_relay $(PROJECT_ROOT)setup.py
 	pycodestyle $(PROJECT_ROOT)openedx_blockstore_relay $(PROJECT_ROOT)setup.py
-	isort --check-only --diff --recursive openedx_blockstore_relay $(PROJECT_ROOT)setup.py
+	isort --check-only --diff --recursive $(PROJECT_ROOT)openedx_blockstore_relay $(PROJECT_ROOT)setup.py
 
 # requirements: ## install development environment requirements
 # 	pip install -qr requirements/pip-tools.txt
@@ -78,10 +78,6 @@ test: clean
 
 diff_cover: test ## find diff lines that need test coverage
 	diff-cover coverage.xml
-
-# test-all: ## run tests on every supported Python/Django combination
-# 	tox -e quality
-# 	tox
 
 validate: quality test ## run tests and quality checks
 
