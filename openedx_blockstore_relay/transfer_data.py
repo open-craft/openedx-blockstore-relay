@@ -11,11 +11,12 @@ import requests
 from django.conf import settings
 from django.utils.translation import gettext as _
 from future.moves.urllib.parse import urljoin
-from lxml.etree import Element, tostring as etree_tostring
+from lxml.etree import Element
+from lxml.etree import tostring as etree_tostring
 from xblock.core import XML_NAMESPACES
 
-from .adapters import override_export_fs, add_url_name_mixin
 from . import compat
+from .adapters import add_url_name_mixin, override_export_fs
 
 LOG = logging.getLogger(__name__)
 
@@ -81,8 +82,10 @@ class TransferBlock(object):
         Upload block-related files to the Bundle.
         """
         LOG.debug('Transfer %s to Bundle <%s>', self.block_key, bundle_uuid)
-        self.bundle_files_url = urljoin(settings.BLOCKSTORE_API_URL,
-                                        '/'.join(['bundles', str(bundle_uuid), 'files', '']))
+        self.bundle_files_url = urljoin(
+            settings.BLOCKSTORE_API_URL,
+            '/'.join(['bundles', str(bundle_uuid), 'files', '']),
+        )
         self.prepare_olx(self.block)
         self.queue_manifest()
         self._post_bundle_files()
@@ -238,16 +241,15 @@ class TransferBlock(object):
             data=etree_tostring(olx_node, encoding="utf-8", pretty_print=True),
             content_type=self._content_type(block_type),
             share_block=share_block,
-            block=block,
         )
 
-    def _add_bundle_file(self,
-                         data,
-                         path,
-                         name=None,
-                         content_type='application/octet-stream',
-                         share_block=False,
-                         block=None):
+    def _add_bundle_file(
+            self,
+            data,
+            path,
+            name=None,
+            content_type='application/octet-stream',
+            share_block=False):
         """
         Add the given file data to the bundle.
 
@@ -261,7 +263,7 @@ class TransferBlock(object):
         if share_block:
             self.manifest['components'].append(path)
 
-        self._queue_static_assets(data, block)
+        self._queue_static_assets(data)
 
     def _queue_bundle_file(self, data, path, name=None, content_type='application/octet-stream', public=False):
         """
@@ -288,7 +290,7 @@ class TransferBlock(object):
         self._bundle_files_queue['public'].append(public)
         return path
 
-    def _queue_static_assets(self, data, block=None):
+    def _queue_static_assets(self, data):
         """
         Collect and queue the static assets paths scraped from the given data string and block .
         """

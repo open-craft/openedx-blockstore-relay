@@ -3,14 +3,13 @@
 """
 Tests for the `openedx-blockstore-relay` transfer_to_blockstore command.
 """
-
-from __future__ import absolute_import, unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
 
 from argparse import ArgumentError
 
+import mock
 from django.core.management import CommandError, call_command
 from django.test import TestCase
-import mock
 
 
 class TransferToBlockstoreCommandTestCase(TestCase):

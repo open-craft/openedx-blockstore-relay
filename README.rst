@@ -52,6 +52,13 @@ Any commands shown in this section should be run from the Studio docker shell (`
 
 3. Go to http://localhost:18250/api/v1/bundles/ in a browser to see the newly created bundle.
 
+Test Instructions
+-----------------
+
+Run the tests from the devstack CMS shell (``make studio-shell``) using::
+
+    make -f /edx/src/openedx-blockstore-relay/Makefile validate
+
 License
 -------
 
