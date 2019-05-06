@@ -2,19 +2,15 @@
 Logic for transferring a subunit (aka XBlock, XModule) from Open edX to a Blockstore Bundle.
 """
 from __future__ import absolute_import, print_function, unicode_literals
+
 import json
 import logging
 
 from django.utils.translation import gettext as _
 
-from .block_serializer import XBlockSerializer
-from .blockstore_client import (
-    add_file_to_draft,
-    create_bundle,
-    create_draft,
-    commit_draft,
-)
 from . import compat
+from .block_serializer import XBlockSerializer
+from .blockstore_client import add_file_to_draft, commit_draft, create_bundle, create_draft
 
 log = logging.getLogger(__name__)
 BUNDLE_DRAFT_NAME = 'relay_import'

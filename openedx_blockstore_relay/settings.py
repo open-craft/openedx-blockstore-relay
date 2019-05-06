@@ -4,7 +4,8 @@ Common settings for the openedx-blockstore-relay app.
 See apps.py for details on how this sort of plugin configures itself for
 integration with Open edX.
 """
-from __future__ import absolute_import, print_function, unicode_literals
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from os.path import sep as path_separator
 
 # Declare defaults: ############################################################

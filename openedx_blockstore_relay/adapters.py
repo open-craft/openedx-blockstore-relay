@@ -2,7 +2,9 @@
 Helpers required to adapt to differing APIs
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
+
 from contextlib import contextmanager
+
 from fs.memoryfs import MemoryFS
 from fs.wrapfs import WrapFS
 

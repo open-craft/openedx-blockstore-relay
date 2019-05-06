@@ -7,8 +7,8 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
 
-from ..block_serializer import XBlockSerializer
 from .. import compat
+from ..block_serializer import XBlockSerializer
 from .course_data import TestCourseMixin
 from .xml_test_mixin import XmlTestMixin
 

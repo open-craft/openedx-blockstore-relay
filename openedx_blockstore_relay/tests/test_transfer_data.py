@@ -8,11 +8,12 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import json
 
 import mock
+
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
 
+from ..transfer_data import transfer_to_blockstore
 from .course_data import TestCourseMixin
 from .xml_test_mixin import XmlTestMixin
-from ..transfer_data import transfer_to_blockstore
 
 
 class TransferToBlockstoreTestCase(TestCourseMixin, XmlTestMixin, ModuleStoreTestCase):

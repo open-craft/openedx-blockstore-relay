@@ -2,6 +2,7 @@
 A mixin for working with XML in test cases
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
+
 import re
 from xml.dom import minidom
 

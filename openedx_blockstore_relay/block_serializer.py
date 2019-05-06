@@ -2,15 +2,17 @@
 Code for serializing an XBlock to OLX
 """
 from __future__ import absolute_import, print_function, unicode_literals
-from collections import namedtuple
-import os
+
 import logging
+import os
+from collections import namedtuple
 
-from lxml.etree import Element, tostring as etree_tostring
 import six
+from lxml.etree import Element
+from lxml.etree import tostring as etree_tostring
 
-from .adapters import override_export_fs
 from . import compat
+from .adapters import override_export_fs
 
 log = logging.getLogger(__name__)
 

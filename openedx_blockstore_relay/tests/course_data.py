@@ -4,8 +4,9 @@ A course containing each of the features whose export functionality we want to t
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-from django.core.files.base import ContentFile
 import edxval.api as edxval_api
+from django.core.files.base import ContentFile
+
 from xmodule.contentstore.content import StaticContent
 from xmodule.contentstore.django import contentstore
 from xmodule.modulestore import ModuleStoreEnum

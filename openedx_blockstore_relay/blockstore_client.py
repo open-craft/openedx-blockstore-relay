@@ -2,13 +2,14 @@
 A very rudimentary API client for Blockstore
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
+
 import base64
 import logging
-import six
 
+import requests
+import six
 from django.conf import settings
 from future.moves.urllib.parse import urljoin
-import requests
 
 log = logging.getLogger(__name__)
 
