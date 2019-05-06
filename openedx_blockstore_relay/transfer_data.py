@@ -99,12 +99,12 @@ def transfer_to_blockstore(root_block_key, bundle_uuid=None, collection_uuid=Non
         folder_path = '{}/'.format(data.def_id)
         path = folder_path + 'definition.xml'
         log.info('Uploading {} to {}'.format(data.orig_block_key, path))
-        add_file_to_draft(bundle_draft_uuid, path, data=data.olx_str)
+        add_file_to_draft(bundle_draft_uuid, path, data.olx_str)
         manifest['components'].append(path)
         # If the block depends on any static asset files, add those too:
         for asset_file in data.static_files:
             asset_path = folder_path + 'static/' + asset_file.name
-            add_file_to_draft(bundle_draft_uuid, asset_path, data=asset_file.data)
+            add_file_to_draft(bundle_draft_uuid, asset_path, asset_file.data)
             manifest['assets'].append(asset_path)
 
     # Commit the manifest file. TODO: do we actually need this?

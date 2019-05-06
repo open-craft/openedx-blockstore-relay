@@ -116,12 +116,27 @@ class XBlockSerializer(object):
         self.olx_str += (
             '<!-- Imported from {} using openedx-blockstore-relay -->\n'.format(six.text_type(self.orig_block_key))
         ).encode('utf-8')
-        # Search the string for references to files stored in the course's
+        # Search the OLX for references to files stored in the course's
         # "Files & Uploads" (contentstore):
         course_key = self.orig_block_key.course_key
         for asset in compat.collect_assets_from_text(self.olx_str, course_key):
             # TODO: need to rewrite the URLs/paths in the olx_str to the new format/location
-            self.static_files.append(StaticFile(name=asset['content'].name, data=asset['content'].data))
+            self.add_static_asset(asset['content'])
+        # Special case: for HTML blocks, the HTML we need to scan is in a separate .html file,
+        # not in the OLX string. But we can access it at 'block.data':
+        if self.orig_block_key.block_type == 'html':
+            for asset in compat.collect_assets_from_text(block.data, course_key):
+                self.add_static_asset(asset['content'])
+
+    def add_static_asset(self, asset):
+        """
+        Add the given contentstore StaticContent file to the's list of static
+        files that this block uses.
+        """
+        # note: asset.name is a human-friendly name, not necessarily the file name.
+        filename = asset.location.path
+        if filename not in [sf.name for sf in self.static_files]:
+            self.static_files.append(StaticFile(name=filename, data=asset.data))
 
     def transform_olx(self, olx_node):
         """
