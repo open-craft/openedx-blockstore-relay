@@ -24,7 +24,7 @@ def _bundle_type(block_type):
     if block_type in ['course']:
         bundle_type = 'course'
     elif block_type in ['chapter', 'sequential']:
-        bundle_type = 'collection'
+        bundle_type = 'section'
     else:
         bundle_type = 'unit'
     return 'olx/{}'.format(bundle_type)
