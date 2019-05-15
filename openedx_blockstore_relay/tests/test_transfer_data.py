@@ -5,126 +5,91 @@ Tests for the `openedx-blockstore-relay` transfer_data module.
 """
 from __future__ import absolute_import, division, print_function, unicode_literals
 
-import re
-from xml.dom import minidom
+import json
 
-import edxval.api as edxval_api
 import mock
-import six
 
-from xmodule.contentstore.content import StaticContent
-from xmodule.contentstore.django import contentstore
 from xmodule.modulestore.tests.django_utils import ModuleStoreTestCase
-from xmodule.modulestore.tests.factories import SampleCourseFactory
 
-from ..transfer_data import TransferBlock
-from .course_data import TEST_COURSE, VIDEO_B_SRT_TRANSCRIPT_DATA, VIDEO_B_VAL_DATA
+from ..transfer_data import transfer_to_blockstore
+from .course_data import TestCourseMixin
+from .xml_test_mixin import XmlTestMixin
 
 
-class TransferBlockTestCase(ModuleStoreTestCase):
+class TransferToBlockstoreTestCase(TestCourseMixin, XmlTestMixin, ModuleStoreTestCase):
     """
-    Tests for TransferBlock. Requires a running instance of edX Studio.
+    Tests for the relay's transfer_data code, which transfers serialized OLX
+    data to Blockstore.
     """
+    # pylint: disable=no-member
     maxDiff = None
     COLLECTION_UUID = 'd3e311a8-b3a8-439d-a111-cc6cb99790e8'
     BUNDLE_UUID = '93fc9c6e-4249-4d57-a63c-b08be9f4fe02'
+    DRAFT_UUID = '12345678-4249-4d57-a63c-a12354565756'
 
     def setUp(self):
-        super(TransferBlockTestCase, self).setUp()
+        super(TransferToBlockstoreTestCase, self).setUp()
 
-        self.course = SampleCourseFactory.create(block_info_tree=TEST_COURSE)
-        # And upload the course static asssets:
-        asset_key = StaticContent.compute_location(self.course.id, 'sample_handout.txt')
-        content = StaticContent(asset_key, "Fake asset", "application/text", "test".encode('utf8'))
-        contentstore().save(content)
-        # And the video data + transcript must also be stored in edx-val for the video export to work:
-        edxval_api.create_video(VIDEO_B_VAL_DATA)
-        edxval_api.create_video_transcript(**VIDEO_B_SRT_TRANSCRIPT_DATA)
+        # Mock out blockstore:
+        for mocked_fn in ('create_bundle', 'create_draft', 'add_file_to_draft', 'commit_draft'):
+            patcher = mock.patch('openedx_blockstore_relay.transfer_data.{}'.format(mocked_fn))
+            setattr(self, 'mock_' + mocked_fn, patcher.start())
+            self.addCleanup(patcher.stop)
+        self.mock_create_bundle.return_value = {"uuid": self.BUNDLE_UUID}
+        self.mock_create_draft.return_value = {"uuid": self.DRAFT_UUID}
 
-    @mock.patch('openedx_blockstore_relay.transfer_data.requests')
-    def test_transfer_to_blockstore(self, mock_requests):
-        mock_response = mock.MagicMock()
-
-        # TODO: Remove once _add_bundle_file() adds the path to the manifest without looking at the response.
-        mock_response.json.return_value = {
-            'path': '/unit1_1_2.olx',
-        }
-        mock_requests.post.return_value = mock_response
-
+    def test_transfer_to_blockstore(self):
+        """
+        Test the whole workflow of exporting part of a course to Blockstore,
+        though with Blockstore itself mocked out.
+        """
         block_key = self.course.id.make_usage_key('vertical', 'unit1_1_2')
-        transfer_obj = TransferBlock(block_key)
-        transfer_obj.transfer_block_to_bundle(self.BUNDLE_UUID)
+        transfer_to_blockstore(block_key)
 
-        mock_requests.post.assert_called_once()
-        call_kwargs = mock_requests.post.call_args[1]
-        files_posted = set(call_kwargs['data']['path'])
+        self.mock_create_bundle.assert_called_once()
+        self.mock_create_draft.assert_called_once()
+        self.mock_commit_draft.assert_called_once()
+
+        # Check the files that were uploaded (via add_file_to_draft(draft_id, name, data)):
+        files_posted = set([call[0][1] for call in self.mock_add_file_to_draft.call_args_list])
 
         self.assertSetEqual(files_posted, {
-            '/bundle.json',
-            '/unit1_1_2.olx',
-            '/unit1_1_2/html_b.html',
-            '/unit1_1_2/50ce37bf-594a-425c-9892-6407a5083eb3-en.srt',  # the subtitles for video_b in unit1_1_2
-            '/static/sample_handout.txt',
+            'bundle.json',
+            'unit/unit1_1_2/definition.xml',
+            'html/html_b/definition.xml',
+            'html/html_b/static/html_b.html',
+            'html/html_b/static/sample_handout.txt',
+            'video/video_b/definition.xml',
+            'video/video_b/static/50ce37bf-594a-425c-9892-6407a5083eb3-en.srt',
+            'drag-and-drop-v2/dnd/definition.xml',
         })
 
-        self.assertDictEqual(transfer_obj.manifest, {
-            'assets': [
-                '/static/sample_handout.txt',
-            ],
-            'components': ['/unit1_1_2.olx'],
-            'dependencies': [],
-            'schema': 0.1,
-            'type': 'olx/unit',
-        })
+        file_data_by_path = {call[0][1]: call[0][2] for call in self.mock_add_file_to_draft.call_args_list}
 
-        file_data_by_path = {
-            call_kwargs['data']['path'][idx]: call_kwargs['files'][idx][1][1]
-            for idx in list(range(len(call_kwargs['files'])))  # files = [('data', (name, data, content_type)), ...]
-        }
-
-        self.assertXmlEqual(file_data_by_path['/unit1_1_2.olx'], '''
-            <unit
-                url_name="unit1_1_2"
-                xmlns:block="http://code.edx.org/xblock/block" xmlns:option="http://code.edx.org/xblock/option"
-            >
-                <html display_name="Unicode and URL test" filename="html_b" url_name="html_b"/>
-                <video
-                    display_name="YouTube Video"
-                    download_video="false"
-                    edx_video_id="50ce37bf-594a-425c-9892-6407a5083eb3"
-                    sub=""
-                    transcripts="{&quot;en&quot;: &quot;50ce37bf-594a-425c-9892-6407a5083eb3-en.srt&quot;}"
-                    url_name="video_b"
-                    youtube_id_1_0="3_yD_cEKoCk"
-                >
-                    <video_asset client_video_id="A Video" duration="0.0" image="">
-                        <transcripts>
-                            <transcript file_format="srt" language_code="en" provider="Custom" />
-                        </transcripts>
-                    </video_asset>
-                    <transcript language="en" src="50ce37bf-594a-425c-9892-6407a5083eb3-en.srt" />
-                </video>
-                <drag-and-drop-v2
-                    url_name="dnd" display_name="A Drag and Drop Block (Pure XBlock)" xblock-family="xblock.v1"
-                />
+        self.assertXmlEqual(file_data_by_path['unit/unit1_1_2/definition.xml'], '''
+            <unit display_name="Unit 1.1.2">
+                <xblock-include definition="html/html_b"/>
+                <xblock-include definition="video/video_b"/>
+                <xblock-include definition="drag-and-drop-v2/dnd"/>
             </unit>
-        ''')
+        ''', remove_comments=True)
+
+        bundle_json_data = json.loads(file_data_by_path['bundle.json'])
+        self.assertEqual(bundle_json_data['schema'], 0.1)
+        self.assertEqual(bundle_json_data['type'], 'olx/unit')
+        self.assertSetEqual(set(bundle_json_data['assets']), {
+            'video/video_b/static/50ce37bf-594a-425c-9892-6407a5083eb3-en.srt',
+            'html/html_b/static/html_b.html',
+            'html/html_b/static/sample_handout.txt',
+        })
+        self.assertSetEqual(set(bundle_json_data['components']), {
+            'video/video_b/definition.xml',
+            'html/html_b/definition.xml',
+            'unit/unit1_1_2/definition.xml',
+            'drag-and-drop-v2/dnd/definition.xml',
+        })
 
         self.assertXmlEqual(
-            file_data_by_path['/unit1_1_2/html_b.html'],
+            file_data_by_path['html/html_b/static/html_b.html'],
             '<p>Activate the ωμέγα 13! <a href="/static/sample_handout.txt">Instructions.</a></p>'
         )
-
-    def assertXmlEqual(self, xml_str_a, xml_str_b):
-        """
-        Assert that the given XML strings are equal,
-        ignoring attribute order and some whitespace variations.
-        """
-        def clean(xml_str):
-            # Collapse repeated whitespace:
-            xml_str = re.sub(r'(\s)\s+', r'\1', xml_str)
-            if isinstance(xml_str, six.text_type):
-                xml_str = xml_str.encode('utf8')
-            return minidom.parseString(xml_str).toprettyxml()
-
-        self.assertEqual(clean(xml_str_a), clean(xml_str_b))

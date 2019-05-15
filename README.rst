@@ -40,7 +40,7 @@ Any commands shown in this section should be run from the Studio docker shell (`
 
 1. Create a collection to hold the content you wish to import::
 
-     curl -d '{"title": "XBlock Collection"}' -H "Content-Type: application/json" -X POST http://edx.devstack.blockstore:18250/api/v1/collections/
+     curl -d '{"title": "XBlock Collection"}' -H "Content-Type: application/json" -X POST http://edx.devstack.blockstore:18250/api/v1/collections
 
    Note the UUID of the new collection.
 
@@ -50,7 +50,7 @@ Any commands shown in this section should be run from the Studio docker shell (`
     --block-key "block-v1:edX+DemoX+Demo_Course+type@vertical+block@256f17a44983429fb1a60802203ee4e0" \
     --collection-uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"
 
-3. Go to http://localhost:18250/api/v1/bundles/ in a browser to see the newly created bundle.
+3. Go to http://localhost:18250/admin/bundles/bundle/ in a browser to see the newly created bundle.
 
 Test Instructions
 -----------------
